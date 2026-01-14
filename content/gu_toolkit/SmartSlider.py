@@ -3,24 +3,26 @@ import traitlets
 import sympy
 from .InputConvert import InputConvert
 
+
 class SmartFloatSlider(widgets.VBox):
     """A FloatSlider with reset, settings, live update toggle, and expression parsing."""
-    
+
     value = traitlets.Float(0.0)
-    
+
     def __init__(self, value=0.0, min=0.0, max=1.0, step=0.1, description='Value:', **kwargs):
         # Initialize internal state
         self._defaults = {'value': value, 'min': min, 'max': max, 'step': step}
-        
+
         # 1. Main Components
         self.slider = widgets.FloatSlider(
             value=value, min=min, max=max, step=step,
             description=description,
             continuous_update=True,
             style={'description_width': 'initial'},
-            layout=widgets.Layout(width='60%') # Adjusted width for compactness
+            # Adjusted width for compactness
+            layout=widgets.Layout(width='60%')
         )
-        
+
         # Changed to Text widget to allow expressions (e.g., "pi/2")
         self.text_input = widgets.Text(
             value=str(value),
@@ -35,16 +37,25 @@ class SmartFloatSlider(widgets.VBox):
         )
 
         # 2. Settings Panel Components
-        style_args = {'style': {'description_width': '50px'}, 'layout': widgets.Layout(width='140px')}
-        self.set_min = widgets.FloatText(value=min, description='Min:', **style_args)
-        self.set_max = widgets.FloatText(value=max, description='Max:', **style_args)
-        self.set_step = widgets.FloatText(value=step, description='Step:', **style_args)
-        self.set_live = widgets.Checkbox(value=True, description='Live Update', indent=False, layout=widgets.Layout(width='100px'))
+        style_args = {'style': {'description_width': '50px'},
+                      'layout': widgets.Layout(width='100px')}
+        self.set_min = widgets.FloatText(
+            value=min, description='Min:', **style_args)
+        self.set_max = widgets.FloatText(
+            value=max, description='Max:', **style_args)
+        self.set_step = widgets.FloatText(
+            value=step, description='Step:', **style_args)
+        self.set_live = widgets.Checkbox(
+            value=True, description='Live Update', indent=False, layout=widgets.Layout(width='100px'))
 
         # Settings Container (Hidden by default)
-        self.settings_panel = widgets.HBox(
-            [self.set_min, self.set_max, self.set_step, self.set_live],
-            layout=widgets.Layout(display='none', border='1px solid #eee', padding='5px', margin='5px 0')
+        self.settings_panel = widgets.VBox([
+            widgets.HBox(
+                [self.set_min, self.set_max, self.set_step]),
+            widgets.HBox([self.set_live]),
+        ],
+            layout=widgets.Layout(
+                display='none', border='1px solid #eee', padding='5px', margin='5px 0')
         )
 
         # 3. Assemble Layout
@@ -57,9 +68,10 @@ class SmartFloatSlider(widgets.VBox):
         # 4. Logic & Wiring
         # Sync Slider <-> Class Trait
         traitlets.link((self, 'value'), (self.slider, 'value'))
-        
+
         # Slider -> Text (One way sync for display)
-        self.slider.observe(lambda c: setattr(self.text_input, 'value', f"{c.new:.4g}"), names='value')
+        self.slider.observe(lambda c: setattr(
+            self.text_input, 'value', f"{c.new:.4g}"), names='value')
 
         # Text -> Slider (with Converter)
         self.text_input.observe(self._handle_text_input, names='value')
@@ -72,8 +84,9 @@ class SmartFloatSlider(widgets.VBox):
         widgets.link((self.set_min, 'value'), (self.slider, 'min'))
         widgets.link((self.set_max, 'value'), (self.slider, 'max'))
         widgets.link((self.set_step, 'value'), (self.slider, 'step'))
-        widgets.link((self.set_live, 'value'), (self.slider, 'continuous_update'))
-        
+        widgets.link((self.set_live, 'value'),
+                     (self.slider, 'continuous_update'))
+
         # Initialize trait
         self.value = value
 
@@ -82,11 +95,12 @@ class SmartFloatSlider(widgets.VBox):
         # Avoid circular updates
         if change.new == str(self.slider.value) or change.new == f"{self.slider.value:.4g}":
             return
-            
+
         try:
-            # Use InputConverter to parse expression
-            new_val = InputConverter(change.new, dest_type=float, truncate=True)
-            
+            # Use InputConvert to parse expression
+            new_val = InputConvert(
+                change.new, dest_type=float, truncate=True)
+
             # Clamp value
             new_val = max(self.slider.min, min(new_val, self.slider.max))
             self.value = new_val

@@ -1,3 +1,49 @@
+"""
+Widgets and interactive plotting helpers for math exploration in Jupyter.
+
+This file defines two main ideas:
+
+1) OneShotOutput
+   A small safety wrapper around ``ipywidgets.Output`` that can only be displayed once.
+   This prevents a common notebook confusion: accidentally displaying the *same* widget
+   in multiple places and then wondering which one is “live”.
+
+2) SmartFigure (+ SmartPlot)
+   A thin, student-friendly wrapper around ``plotly.graph_objects.FigureWidget`` that:
+   - plots SymPy expressions by compiling them to NumPy via ``numpify``,
+   - supports interactive parameter sliders (via ``SmartFloatSlider``),
+   - re-renders automatically when you pan/zoom (throttled) or move a slider.
+
+The intended workflow is:
+
+- define symbols with SymPy (e.g. ``x, a = sp.symbols("x a")``),
+- create a ``SmartFigure``,
+- add one or more plots with ``SmartFigure.plot(...)``,
+- optionally add parameters (sliders) by passing ``parameters=[a, ...]``.
+
+---------------------------------------------------------------------------
+Quick start (in a Jupyter notebook)
+---------------------------------------------------------------------------
+
+>>> import sympy as sp
+>>> from SmartFigure import SmartFigure  # wherever this file lives
+>>>
+>>> x, a = sp.symbols("x a")
+>>> fig = SmartFigure(x_range=(-6, 6), y_range=(-3, 3))
+>>> fig.plot(x, sp.sin(x), parameters=[], id="sin")
+>>> fig.plot(x, a*sp.cos(x), parameters=[a], id="a_cos")  # adds a slider for a
+>>> fig.title = "Sine and a·Cosine"
+>>> fig  # display in the output cell (or use display(fig))
+
+Notes for students
+------------------
+- SymPy expressions are symbolic. They are like *formulas*.
+- Plotly needs numerical values (arrays of numbers).
+- ``numpify`` bridges the two: it turns a SymPy expression into a NumPy-callable function.
+- Sliders provide the numeric values of parameters like ``a`` in real time.
+"""
+
+
 
 # === SECTION: OneShotOutput [id: OneShotOutput]===
 import sympy as sp
@@ -17,9 +63,22 @@ class OneShotOutput(widgets.Output):
     """
     A specialized Output widget that can only be displayed once.
 
-    This widget enforces a one-time display policy to prevent accidental
-    duplication in notebook interfaces. Once shown, any subsequent attempts
-    to display it will raise a RuntimeError.
+    Why this exists
+    ---------------
+    In Jupyter, widgets are *live objects* connected to the frontend by a comm channel.
+    If you display the same widget instance multiple times, it is easy to end up with
+    confusing UI behavior (e.g., “Which copy should update?”, “Why did output appear
+    in two places?”, etc.).
+
+    ``OneShotOutput`` prevents accidental duplication by raising an error on the
+    second display attempt.
+
+    What counts as “display”?
+    -------------------------
+    Any of the following will count as displaying the widget:
+    - having it be the last expression in a cell,
+    - calling ``display(output)``,
+    - placing it inside another widget/layout that is displayed.
 
     Attributes
     ----------
@@ -28,17 +87,39 @@ class OneShotOutput(widgets.Output):
 
     Notes
     -----
-    - Inherits from ipywidgets.Output
-    - Uses __slots__ for memory optimization
-    - Designed for use in Jupyter notebook/lab environments
+    - Inherits from ``ipywidgets.Output``.
+    - Uses ``__slots__`` for a tiny memory optimization.
+    - Designed for Jupyter Notebook / JupyterLab.
 
     Examples
     --------
-    >>> output = OneShotOutput()
-    >>> with output:
-    ...     print("This will appear in the output widget")
-    >>> output.show()  # First display - works
-    >>> output.show()  # Second display - raises RuntimeError
+    Basic output usage:
+
+    >>> out = OneShotOutput()
+    >>> with out:
+    ...     print("Hello from inside the Output widget!")
+    >>> out  # first display works
+
+    Attempting to display again raises:
+
+    >>> out  # doctest: +SKIP
+    RuntimeError: OneShotOutput has already been displayed...
+
+    Use case: preventing accidental double-display:
+
+    >>> out = OneShotOutput()
+    >>> with out:
+    ...     print("I only want this shown once.")
+    >>> display(out)  # ok
+    >>> display(out)  # raises RuntimeError
+
+    If you *really* need to display it again (advanced / use with caution),
+    you can reset:
+
+    >>> out.reset_display_state()
+    >>> display(out)  # now allowed again
+
+    (See ``reset_display_state`` for warnings.)
     """
 
     __slots__ = ('_displayed',)
@@ -95,6 +176,84 @@ from .InputConvert import InputConvert
 
 
 class SmartPlot():
+    """
+    A single plotted curve managed by a :class:`SmartFigure`.
+
+    Conceptually, a ``SmartPlot`` is “one function on one set of axes”.
+    It owns a single Plotly trace (a line plot) and knows how to:
+
+    - compile the SymPy expression to a fast NumPy function (via ``numpify``),
+    - sample x-values on an appropriate domain,
+    - evaluate y-values (including current slider parameter values),
+    - push the sampled data into the Plotly trace.
+
+    Notes for students
+    ------------------
+    - ``var`` is the independent variable (a SymPy symbol like ``x``).
+    - ``func`` is a SymPy expression like ``sin(x)`` or ``a*x**2``.
+    - Parameters (like ``a``) are SymPy symbols whose values come from sliders.
+
+    Important behavior
+    ------------------
+    ``render()`` will **not** compute anything if the plot is not visibly drawn.
+    In this code, that means:
+    - if ``self.visible`` is exactly ``True``, it renders;
+    - if ``self.visible`` is ``False`` or ``"legendonly"``, it skips computation.
+
+    This is useful for performance in interactive notebooks.
+
+    Public API
+    ----------
+    The following are “public” (no leading underscore):
+    - constructor ``__init__``
+    - ``set_var_func``
+    - properties ``var``, ``parameters``, ``func`` are read-only
+        To change them, use ``set_func``
+    - properties ``label``
+        Read/write, changes the label in the legend
+    - ``x_domain``
+        Sets the domain of the x-axis, no data will be rendered outside of this range, whatever the viewport is.
+        To make it unlimited, use ``None``.
+    ``sampling_points`` are read/write
+        Number of sampling points for the plot.
+        Set to ``None`` to use the default number of samples of the figure.
+        Useful mainly if the function is expensive to evaluate or (set it smaller than the default), or 
+        if the function changes significantly (set it larger than the default).
+        Changing the parameter triggers a re-render
+    - ``visible``
+        Read/write, changes the visibility of the plot. Possible values are:
+            - True (visible),
+            - False (hidden in plot and legend),
+            - "legendonly" (not drawn, but shown in legend).
+        Clicking on the legend entry will toggle the visibility between "visible" and "legendonly".
+    - ``compute_data``
+        Recomputes the data (x-values and y-values) 
+    - ``render``
+        Pushes the data into the Plotly trace
+    - ``update``
+        Updates all aspects of the plot
+
+    Examples
+    --------
+    Typically you do not create ``SmartPlot`` directly; you call ``SmartFigure.plot``.
+
+    >>> import sympy as sp
+    >>> x = sp.Symbol("x")
+    >>> fig = SmartFigure()
+    >>> display(fig)  # display Figure in the output cell 
+    >>> p = fig.plot(x, sp.sin(x), parameters=[], id="sin")
+    >>> p.label
+    'sin'
+
+
+    Limit the evaluation domain:
+
+    >>> p.x_domain = (-10, 10)  # compute on a wider domain than the current viewport
+
+    Change sampling density for this plot only:
+
+    >>> p.sampling_points = 2000
+    """
 
     def __init__(self, var, func, smart_figure, parameters=None, x_domain=None, sampling_points=None, label="", visible=True):
         self._smart_figure = smart_figure
@@ -103,7 +262,7 @@ class SmartPlot():
 
         self._suspend_render = True
 
-        self.set_var_func(var, func, parameters)  # Private method 
+        self.set_func(var, func, parameters)  # Private method 
         
         self.x_domain = x_domain
 
@@ -117,25 +276,55 @@ class SmartPlot():
 
         # raise NotImplementedError("SmartPlot is not implemented yet.")
 
-    def set_var_func(self, var, func, parameters=None):
+    def set_func(self, var, func, parameters=None):
+        """
+        Set the independent variable and symbolic function for this plot.
+
+        Parameters
+        ----------
+        var : sympy.Symbol
+            The independent variable.
+        func : sympy.Expr
+            The SymPy expression to plot.
+        parameters : list[sympy.Symbol] or None, optional
+            Parameter symbols used by ``func`` whose numeric values come from sliders.
+
+        Notes
+        -----
+        Triggers recompilation via ``numpify`` and a re-render.
+
+        Examples
+        --------
+        >>> import sympy as sp
+        >>> x = sp.Symbol("x")
+        >>> fig = SmartFigure()
+        >>> p = fig.plot(x, sp.sin(x), parameters=[], id="f")
+        >>> p.set_var_func(x, sp.cos(x), parameters=[])
+
+        However, since SmartFigure supports updating via calling plot again with the same `id`, this is not necessary. It is easier to do:
+          >>> import sympy as sp
+        >>> x = sp.Symbol("x")
+        >>> fig = SmartFigure()
+        >>> fig.plot(x, sp.sin(x), parameters=[], id="f")
+        >>> fig.plot(t, sp.cos(t), parameters=[], id="f")
+        """
+
         self._var = var
         self._parameters = parameters
-        self.func = func
+        self._func = func
+        self._f_numpy = numpify(func, args=[self._var,] + (self._parameters or []) )
 
     @property
     def var(self):
         return self._var
 
+    @property
+    def parameters(self):
+        return self._parameters
 
     @property
     def func(self):
         return self._func
-
-    @func.setter
-    def func(self, value):
-        self._func = value
-        self._f_numpy = numpify(value, args=[self._var,] + (self._parameters or []) )
-        self.render()
 
     @property
     def label(self):
@@ -178,7 +367,8 @@ class SmartPlot():
     @visible.setter
     def visible(self, value):
         self._plot_handle.visible = value
-        self.render()
+        if value == True:
+            self.render()
 
     def compute_data(self):
         viewport_x_range = self._smart_figure.current_x_range
@@ -214,19 +404,21 @@ class SmartPlot():
         self._plot_handle.x = x_values
         self._plot_handle.y = y_values
     
-    def update(self, var, func, label=None, x_domain=None, sampling_points=None):
+    def update(self, var, func, parameters=None, label=None, x_domain=None, sampling_points=None):
         if label is not None:
             self.label = label
         if x_domain is not None:
             if x_domain=="figure_default":
                 self.x_domain = None
             self.x_domain = x_domain
-        if func is not None or var is not None:
+        if func is not None or var is not None or parameters is not None:
             if var is None:
                 var = self.var
+            if parameters is None:
+                parameters = self.parameters
             if func is None:
                 func = self.func    
-            self.set_var_func(var, func)
+            self.set_func(var, func, parameters=parameters)
         if sampling_points is not None:
             if sampling_points=="figure_default":
                 self.sampling_points = None
@@ -238,9 +430,100 @@ from .SmartSlider import SmartFloatSlider
 
 class SmartFigure():
     """
-    A class for creating smart figures with enhanced functionalities.
+    An interactive Plotly figure for plotting SymPy functions with slider parameters.
 
-    Uses Plotly for interactive visualizations.
+    What problem does this solve?
+    -----------------------------
+    We often want to:
+    - type a symbolic function like ``sin(x)`` or ``a*x**2 + b`` (SymPy),
+    - *see* it immediately (Plotly),
+    - and then explore “What happens if I change a parameter?”
+
+    ``SmartFigure`` provides a simple API that encourages experimentation.
+
+    Key features
+    ------------
+    - Uses Plotly ``FigureWidget`` so it is interactive inside notebooks.
+    - Uses a right-side controls panel (a ``VBox``) for parameter sliders.
+    - Supports plotting multiple curves identified by an ``id``.
+    - Re-renders curves on:
+      - slider changes,
+      - pan/zoom changes (throttled to at most once every 0.5 seconds).
+
+    Public API
+    ----------
+    Methods:
+    - ``__init__``
+    - ``plot``  Creates a new plot
+    - ``render`` Re-renders all plots
+    - ``add_param`` (advanced) Creates a slider for a parameter (automatically done when ``plot`` is called)
+    - ``add_scatter`` (advanced)
+    - ``update_layout`` (advanced)
+    Properties: 
+    - ``title`` Title of the figure
+    - ``x_range``, ``y_range``, "home" ranges of the viewport
+    - ``sampling_points`` number of sampling points for plots
+    - ``current_x_range``, ``current_y_range``, read-only ranges of the current viewport position
+    - ``plots`` a dictionary of ``SmartPlot`` objects indexed by ``id`` specified at creation with ``plot(...)``
+
+    Advanced Usage
+    -------------
+    The underlying Plotly's ``FigureWidget`` can be accessed via ``_figure``.
+    The right-side controls panel can be accessed via ``_controls_panel``.
+
+
+    A note about parameters
+    -----------------------
+    Parameters are SymPy symbols like ``a`` and ``b`` that get a slider each.
+    You pass them to ``plot(..., parameters=[a, b])`` and the sliders appear
+    automatically (via ``add_param``).
+
+
+    Examples
+    --------
+    1) Plot a simple function:
+
+    >>> import sympy as sp
+    >>> x = sp.Symbol("x")
+    >>> fig = SmartFigure()
+    >>> fig.plot(x, sp.sin(x), parameters=[], id="sin")
+    >>> fig.title = "y = sin(x)"
+    >>> fig  # display in notebook
+
+    2) Add a parameter slider:
+
+    >>> import sympy as sp
+    >>> x, a = sp.symbols("x a")
+    >>> fig = SmartFigure(x_range=(-6, 6), y_range=(-3, 3))
+    >>> fig.plot(x, a*sp.sin(x), parameters=[a], id="a_sin")
+    >>> fig.title = "Explore: y = a·sin(x)"
+    >>> fig
+
+    3) Multiple curves:
+
+    >>> import sympy as sp
+    >>> x, a = sp.symbols("x a")
+    >>> fig = SmartFigure()
+    >>> fig.plot(x, sp.sin(x), parameters=[], id="sin")
+    >>> fig.plot(x, sp.cos(x), parameters=[], id="cos")
+    >>> fig.plot(x, a*sp.sin(x), parameters=[a], id="a_sin")
+    >>> fig.title = "Sine, Cosine, and a·Sine"
+    >>> fig
+
+    4) Update an existing plot by reusing its id:
+
+    >>> import sympy as sp
+    >>> x = sp.Symbol("x")
+    >>> fig = SmartFigure()
+    >>> fig.plot(x, x**2, parameters=[], id="f")
+    >>> fig.plot(x, x**3, parameters=[], id="f")  # updates curve "f" in-place
+
+    5) Control the sampling density:
+
+    >>> fig = SmartFigure(sampling_points=2000)  # global default for the figure
+
+    or per plot:
+    >>> fig.plot(x, sp.sin(x), parameters=[], id="sin", sampling_points=5000)
     """
     __slots__ = ['_figure', '_output', 'plots',
                  '_sampling_points', '_x_range', '_y_range',
@@ -368,10 +651,16 @@ class SmartFigure():
         """
         
         description = f"${sp.latex(parameter_id)}$" # Can be enriched later
-
+        if parameter_id in self._params:
+            if self._debug:
+                with self._output:
+                    print(f"Parameter {parameter_id} already exists. Skipping.")
+            return 
+        
         slider = SmartFloatSlider(description=description, value=value, min=min, max=max, step=step)
         self._controls_panel.children += (slider,)
         self._params[parameter_id] = slider
+        
 
         def rerender_on_param_change(change):
             self.render()
@@ -464,20 +753,73 @@ class SmartFigure():
 
     def plot(self, var, func, parameters=None, id=None, x_domain=None, sampling_points=None):
         """
-        Plot a function on the figure.
+        Plot a SymPy expression on the figure (and keep it “live”).
 
         Parameters
         ----------
-        var : SymPy symbol
-            independent variable.
-        func : SymPy expression
-            expression to plot.
+        var : sympy.Symbol
+            Independent variable (e.g. ``x``).
+        func : sympy.Expr
+            SymPy expression (e.g. ``sin(x)``, ``a*x**2 + b``).
+        parameters : list[sympy.Symbol] or None, optional
+            Parameter symbols whose numeric values come from sliders.
+            **Important:** In this version, pass ``[]`` when there are no parameters.
         id : str, optional
-            The unique identifier for the plot.
-        x_domain : array-like, optional
-            The domain of the x-axis. If not provided, the viewport range will be rendered.
-        sampling_points : int, optional
-            Number of sampling points for the plot. If not provided, or "figure_default", the figure's default will be used.
+            Unique identifier for the plot.
+            - If ``id`` is new: creates a new plot.
+            - If ``id`` already exists: updates the existing plot in-place.
+            If not provided, the method tries to choose ``"f_0"``, ``"f_1"``, ...
+        x_domain : tuple (x_min, x_max), optional
+            Optional domain override for the plot. See ``SmartPlot.x_domain``.
+        sampling_points : int or "figure_default", optional
+            Number of sampling points for this plot.
+            - If not provided: use existing plot setting or figure default.
+            - If "figure_default": reset plot override to use figure default.
+
+        Returns
+        -------
+        SmartPlot
+            The created or updated plot object.
+
+        Notes for students
+        ------------------
+        Think of this as:
+        - “add a curve to the figure”
+        - and “keep it updated when sliders or viewport changes”.
+
+        Examples
+        --------
+        Basic plot:
+
+        >>> import sympy as sp
+        >>> x = sp.Symbol("x")
+        >>> fig = SmartFigure()
+        >>> fig.plot(x, sp.sin(x), parameters=[], id="sin")
+        >>> fig
+
+        Add a parameter slider:
+
+        >>> import sympy as sp
+        >>> x, a = sp.symbols("x a")
+        >>> fig = SmartFigure()
+        >>> fig.plot(x, a*sp.sin(x), parameters=[a], id="a_sin")
+        >>> fig
+
+        Update an existing plot:
+
+        >>> import sympy as sp
+        >>> x = sp.Symbol("x")
+        >>> fig = SmartFigure()
+        >>> fig.plot(x, x**2, parameters=[], id="f")
+        >>> fig.plot(x, x**3, parameters=[], id="f")  # same id => update curve
+
+        Choose a wider computation domain than the visible window:
+
+        >>> fig.plot(x, sp.sin(x), parameters=[], id="sin", x_domain=(-20, 20))
+
+        Increase resolution:
+
+        >>> fig.plot(x, sp.sin(x), parameters=[], id="sin", sampling_points=5000)
         """
         if id is None:
             for n in range(101):  # 0 to 100 inclusive
@@ -487,12 +829,21 @@ class SmartFigure():
             if id is None: 
                 raise ValueError("No available f_n identifiers (max 100 reached)")
             
-        if parameters is not None:
-            print(f"Parameters: {parameters}")
+        if self._debug:
+            with self._output:
+                print(f"Plotting {sp.latex(func)}, var={sp.latex(var)}")
+            if parameters is not None:
+                print(f"Parameters: {parameters}")
 
+        if parameters is None:
+            parameters = []
+
+        for p in parameters:
+            self.add_param(p)
+            
         if id in self.plots:
                 plot=self.plots[id]
-                plot.update(var, func, label=None, x_domain=x_domain, sampling_points=sampling_points)
+                plot.update(var, func, parameters, label=None, x_domain=x_domain, sampling_points=sampling_points)
         else:
             plot = SmartPlot(
                 var=var,
