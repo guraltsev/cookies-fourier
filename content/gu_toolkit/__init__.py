@@ -3,28 +3,64 @@
 This module re-exports the notebook-facing convenience surface so users can
 import from a single namespace, for example:
 
->>> from gu_toolkit import SmartFigure, parameter, plot  # doctest: +SKIP
+>>> from gu_toolkit import Figure, parameter, plot  # doctest: +SKIP
 
 It intentionally exposes both high-level plotting helpers and lower-level
 building blocks (parameter events/references and numeric-expression wrappers)
 for advanced integrations.
 """
 
-from .prelude import *
+# Optional explicit module handle to avoid callable/module name ambiguity.
+from . import numpify as numpify_module
+from .codegen import CodegenOptions, figure_to_code, sympy_to_code
+from .Figure import (
+    Figure,
+    FigureViews,
+    FigureLayout,
+    Plot,
+    View,
+    current_figure,
+    get_samples,
+    get_title,
+    get_x_range,
+    get_y_range,
+    info,
+    parameter,
+    parameters,
+    plots,
+    render,
+    set_samples,
+    set_title,
+    set_x_range,
+    set_y_range,
+)
+from .Figure import (
+    plot as toolkit_plot,
+)
+from .Figure import (
+    plot_style_options as toolkit_plot_style_options,
+)
+from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
 from .NamedFunction import NamedFunction as NamedFunction
-from .numpify import (
-    BoundNumpifiedFunction,
-    NumpifiedFunction,
-    ParameterProvider,
-    numpify as numpify,
+from .Notebook import *
+from .numeric_callable import (
+    DYNAMIC_PARAMETER,
+    UNFREEZE,
+    NumericFunction,
+    ParameterContext,
+    numpify,
     numpify_cached,
 )
-from .SmartFigure import SmartFigure as Figure, SmartFigure, add_info_component, current_figure, get_info_output, get_sampling_points, get_title, get_x_range, get_y_range, parameter, parameters, params, plot, plot_style_options, plots, render, set_sampling_points, set_title, set_x_range, set_y_range
-from .SmartParseLaTeX import parse_latex
+from .ParameterSnapshot import ParameterSnapshot
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
-# from .SmartException import *
-# from .SmartFigure import *
+from .ParseLaTeX import parse_latex
+from .PlotSnapshot import PlotSnapshot
+from .Slider import FloatSlider
 
-from .ParameterSnapshot import ParameterSnapshot
-from .NumericExpression import PlotView
+# Keep toolkit helpers authoritative after notebook namespace wildcard imports.
+# ``Notebook`` intentionally exports SymPy's ``plot`` helper via
+# ``from sympy import *`` for convenience, but package-level ``plot`` should
+# resolve to gu_toolkit's module helper for notebook examples and docs.
+plot = toolkit_plot
+plot_style_options = toolkit_plot_style_options

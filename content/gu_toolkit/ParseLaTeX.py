@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sympy import Basic
 from sympy.parsing.latex import parse_latex as _sympy_parse_latex
 
 __all__ = ["LatexParseError", "parse_latex"]
@@ -53,14 +54,19 @@ def parse_latex(tex: str, *args: Any, **kwargs: Any):
     sympy.parsing.latex.parse_latex
         Underlying SymPy parser wrapped by this helper.
     """
-    backend = kwargs.get("backend", None)
+    backend = kwargs.get("backend")
 
     if backend is not None:
         return _sympy_parse_latex(tex, *args, **kwargs)
 
     lark_err = None
     try:
-        return _sympy_parse_latex(tex, *args, backend="lark", **kwargs)
+        lark_result = _sympy_parse_latex(tex, *args, backend="lark", **kwargs)
+        if isinstance(lark_result, Basic):
+            return lark_result
+        raise TypeError(
+            f"lark backend returned non-SymPy result ({type(lark_result).__name__})"
+        )
     except Exception as e:
         lark_err = e
 

@@ -1,13 +1,13 @@
 """Standardized parameter-change event payloads.
 
 This module defines ``ParamEvent``, the immutable structure emitted by
-``ParamRef.observe`` and consumed by SmartFigure parameter hooks.
+``ParamRef.observe`` and consumed by Figure parameter hooks.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sympy.core.symbol import Symbol
 
@@ -35,7 +35,7 @@ class ParamEvent:
     Notes
     -----
     This structure is produced by :meth:`ParamRef.observe` and passed through
-    :class:`SmartFigure` hooks. Consumers should prefer ``parameter`` and
+    :class:`Figure` hooks. Consumers should prefer ``parameter`` and
     ``new`` for stable semantics, and use ``raw`` only for debugging.
 
     Examples
@@ -46,8 +46,9 @@ class ParamEvent:
     >>> # A synthetic event for testing or documentation purposes:
     >>> ParamEvent(parameter=a, old=0, new=1, ref=None, raw=None)  # doctest: +SKIP
     """
+
     parameter: Symbol
     old: Any
     new: Any
-    ref: "ParamRef"
+    ref: ParamRef
     raw: Any = None

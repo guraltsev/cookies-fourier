@@ -1,12 +1,13 @@
 """Parameter-reference protocol and default widget-backed implementation.
 
-This module defines the discoverable contract used by SmartFigure parameter APIs
+This module defines the discoverable contract used by Figure parameter APIs
 and a proxy implementation that wraps concrete controls.
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol, Sequence, runtime_checkable
+from collections.abc import Callable, Sequence
+from typing import Any, Protocol, runtime_checkable
 
 from sympy.core.symbol import Symbol
 
@@ -15,7 +16,7 @@ from .ParamEvent import ParamEvent
 
 @runtime_checkable
 class ParamRef(Protocol):
-    """Protocol for parameter references used by SmartFigure.
+    """Protocol for parameter references used by Figure.
 
     A ``ParamRef`` exposes the current value of a parameter (typically from a
     slider widget), a reference to the underlying widget, and observation hooks
@@ -91,7 +92,9 @@ class ParamRef(Protocol):
             New value to set on the underlying widget.
         """
 
-    def observe(self, callback: Callable[[ParamEvent], None], *, fire: bool = False) -> None:
+    def observe(
+        self, callback: Callable[[ParamEvent], None], *, fire: bool = False
+    ) -> None:
         """Register a callback that receives :class:`ParamEvent` on changes.
 
         Parameters
@@ -108,9 +111,9 @@ class ParamRef(Protocol):
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.observe(lambda event: None, fire=False)  # doctest: +SKIP
 
         See Also
@@ -176,9 +179,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         """
         self._parameter = parameter
         self._widget = widget
@@ -195,9 +198,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.parameter  # doctest: +SKIP
         a
         """
@@ -215,10 +218,10 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
-        >>> isinstance(ref.widget, SmartFloatSlider)  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
+        >>> isinstance(ref.widget, FloatSlider)  # doctest: +SKIP
         True
         """
         return self._widget
@@ -235,9 +238,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider(value=2.0))  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider(value=2.0))  # doctest: +SKIP
         >>> float(ref.value)  # doctest: +SKIP
         2.0
         """
@@ -259,9 +262,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.value = 3.0  # doctest: +SKIP
         """
         self._widget.value = v
@@ -283,9 +286,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider(value=1.5))  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider(value=1.5))  # doctest: +SKIP
         >>> ref.default_value  # doctest: +SKIP
         1.5
         """
@@ -307,16 +310,18 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.default_value = 2.0  # doctest: +SKIP
         """
         if not hasattr(self._widget, "default_value"):
             raise AttributeError("default_value not supported for this control.")
         self._widget.default_value = v
 
-    def observe(self, callback: Callable[[ParamEvent], None], *, fire: bool = False) -> None:
+    def observe(
+        self, callback: Callable[[ParamEvent], None], *, fire: bool = False
+    ) -> None:
         """Register a callback for value changes.
 
         Parameters
@@ -338,16 +343,21 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.observe(lambda event: None, fire=False)  # doctest: +SKIP
         """
+
         def _handler(change: Any) -> None:
             event = ParamEvent(
                 parameter=self._parameter,
-                old=getattr(change, "old", None) if not isinstance(change, dict) else change.get("old"),
-                new=getattr(change, "new", None) if not isinstance(change, dict) else change.get("new"),
+                old=getattr(change, "old", None)
+                if not isinstance(change, dict)
+                else change.get("old"),
+                new=getattr(change, "new", None)
+                if not isinstance(change, dict)
+                else change.get("new"),
                 ref=self,
                 raw=change,
             )
@@ -380,9 +390,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider(value=2.0))  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider(value=2.0))  # doctest: +SKIP
         >>> ref.reset()  # doctest: +SKIP
         """
         if hasattr(self._widget, "reset"):
@@ -419,9 +429,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> "min" in ref.capabilities  # doctest: +SKIP
         True
 
@@ -446,9 +456,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> "min" in dir(ref)  # doctest: +SKIP
         True
         """
@@ -479,9 +489,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider(min=-1.0, max=1.0))  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider(min=-1.0, max=1.0))  # doctest: +SKIP
         >>> ref.min  # doctest: +SKIP
         -1.0
         """
@@ -499,9 +509,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.min = -2.0  # doctest: +SKIP
         """
         if not hasattr(self._widget, "min"):
@@ -520,9 +530,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider(min=-1.0, max=1.0))  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider(min=-1.0, max=1.0))  # doctest: +SKIP
         >>> ref.max  # doctest: +SKIP
         1.0
         """
@@ -540,9 +550,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.max = 2.0  # doctest: +SKIP
         """
         if not hasattr(self._widget, "max"):
@@ -561,9 +571,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider(step=0.5))  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider(step=0.5))  # doctest: +SKIP
         >>> ref.step  # doctest: +SKIP
         0.5
         """
@@ -581,9 +591,9 @@ class ProxyParamRef:
         Examples
         --------
         >>> import sympy as sp  # doctest: +SKIP
-        >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
+        >>> from Slider import FloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
+        >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.step = 0.1  # doctest: +SKIP
         """
         if not hasattr(self._widget, "step"):
